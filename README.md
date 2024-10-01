@@ -1,2 +1,2 @@
-# miscpwsh
-misc pwsh scripts
+# misc pwsh scripts
+script dumping ground
