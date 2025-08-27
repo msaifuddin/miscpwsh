@@ -5,6 +5,7 @@ $requiredModules = @(
     "Microsoft.Graph.Users",
     "Microsoft.Graph.DeviceManagement",
     "Microsoft.Graph.Identity.DirectoryManagement"
+	"Microsoft.Graph.Identity.Governance"
 )
 
 foreach ($module in $requiredModules) {
@@ -13,11 +14,13 @@ foreach ($module in $requiredModules) {
         try {
             Install-Module -Name $module -Scope CurrentUser -Force -ErrorAction Stop
             Write-Host "$module module installed successfully." -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Host "Failed to install $module module. Please install it manually." -ForegroundColor Red
             exit
         }
-    } else {
+    }
+    else {
         Write-Host "$module module is already installed." -ForegroundColor Green
     }
 }
@@ -27,7 +30,8 @@ foreach ($module in $requiredModules) {
     try {
         Import-Module $module -ErrorAction Stop
         Write-Host "Imported $module module." -ForegroundColor Green
-    } catch {
+    }
+    catch {
         Write-Host "Failed to import $module module. Please check the installation." -ForegroundColor Red
         exit
     }
@@ -57,7 +61,8 @@ function Read-SingleKey {
     $keyInfo = [System.Console]::ReadKey($true)
     if ($keyInfo.Key -eq 'Enter') {
         return 'ENTER'
-    } else {
+    }
+    else {
         return $keyInfo.KeyChar.ToString().ToUpper()
     }
 }
@@ -74,9 +79,11 @@ function Show-NotFoundMessage {
     )
     if ($Context -eq 'Users') {
         Write-Host "NO USERS FOUND" -ForegroundColor Yellow
-    } elseif ($Context -eq 'Devices') {
+    }
+    elseif ($Context -eq 'Devices') {
         Write-Host "NO DEVICES FOUND" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         Write-Host "NOT FOUND" -ForegroundColor Yellow
     }
 }
@@ -85,7 +92,7 @@ function Show-NotFoundMessage {
 function Draw-Banner {
     param (
         [string]$ConnectedUser = "",
-        [string]$Version = "v1.2"
+        [string]$Version = "v1.3"
     )
 
     Clear-Host
@@ -138,7 +145,8 @@ function Authenticate-Graph {
             Read-Host "Press Enter to continue..."
             # Draw the banner with connected user
             Draw-Banner $global:userDisplayName
-        } else {
+        }
+        else {
             Write-Host "Authentication failed or user information is unavailable." -ForegroundColor Red
             $global:isConnected = $false
             # Pause to allow user to see the failure message
@@ -150,7 +158,8 @@ function Authenticate-Graph {
             }
         }
 
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
         $global:isConnected = $false
         # Pause to allow user to see the error message
@@ -169,26 +178,27 @@ function Activate-PIM {
     
     # Function to read user input and detect special keys
     function Read-UserInput {
-        param(
-            [string[]]$SpecialKeys = @()
-        )
-        
+        param([string[]]$SpecialKeys = @())
         $input = ''
         while ($true) {
             $key = [System.Console]::ReadKey($true)
             if ($key.Key -eq 'Escape') {
                 throw 'UserCancelled'
-            } elseif ($SpecialKeys -contains $key.KeyChar.ToString().ToUpper()) {
+            }
+            elseif ($SpecialKeys -contains $key.KeyChar.ToString().ToUpper()) {
                 throw $key.KeyChar.ToString().ToUpper()
-            } elseif ($key.Key -eq 'Enter') {
-                Write-Host  # Move to the next line
+            }
+            elseif ($key.Key -eq 'Enter') {
+                Write-Host
                 break
-            } elseif ($key.Key -eq 'Backspace') {
+            }
+            elseif ($key.Key -eq 'Backspace') {
                 if ($input.Length -gt 0) {
                     $input = $input.Substring(0, $input.Length - 1)
-                    [System.Console]::Write("`b `b")  # Move cursor back, overwrite character, move back again
+                    [System.Console]::Write("`b `b")
                 }
-            } else {
+            }
+            else {
                 $input += $key.KeyChar
                 [System.Console]::Write($key.KeyChar)
             }
@@ -207,11 +217,9 @@ function Activate-PIM {
             Draw-Banner $global:userDisplayName
             Write-Host "Loading PIM roles..." -ForegroundColor Cyan
 
-            # Get current user information
             $currentUser = Get-MgUser -UserId $global:userDisplayName
             $currentUserId = $currentUser.Id
 
-            # Retrieve eligible roles for the user
             $eligibleRoles = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -Filter "principalId eq '$currentUserId'" -ExpandProperty RoleDefinition
 
             if (-not $eligibleRoles) {
@@ -221,11 +229,9 @@ function Activate-PIM {
                 return
             }
 
-            # Retrieve active role assignment schedule instances for the user
             $activeRoles = Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance -Filter "principalId eq '$currentUserId'" -ExpandProperty RoleDefinition
             $activeRoleIds = $activeRoles | Select-Object -ExpandProperty RoleDefinition | Select-Object -ExpandProperty Id
 
-            # Display available roles with index for easy selection
             Clear-Host
             Draw-Banner $global:userDisplayName
             Write-Host "`nEligible Roles:" -ForegroundColor Cyan
@@ -237,54 +243,61 @@ function Activate-PIM {
 
                 if ($activeRoleIds -contains $roleId) {
                     Write-Host "$index. [Active] $roleDisplayName" -ForegroundColor Green
-                } else {
+                }
+                else {
                     Write-Host "$index. $roleDisplayName" -ForegroundColor White
                 }
                 $roleIndexMap[$index] = $role
                 $index++
             }
 
-            # Prompt user to choose the roles to activate or deactivate
             Write-Host
             Write-Host "Enter the numbers corresponding to the roles you want to activate/deactivate (e.g., 1,3,5)"
             Write-Host "Or press 'R' to reload the PIM roles list or 'E' to return to the main menu."
             Write-Host "Press ESC at any time to return to the main menu."
             Write-Host -NoNewline "Choice: "
             try {
-                $chosenIndicesInput = Read-UserInput -SpecialKeys @('E','R')
-            } catch {
+                $chosenIndicesInput = Read-UserInput -SpecialKeys @('E', 'R')
+            }
+            catch {
                 if ($_.Exception.Message -eq 'UserCancelled') {
                     Write-Host "`nOperation cancelled by user. Returning to main menu." -ForegroundColor Yellow
                     Start-Sleep -Seconds 3
                     return
-                } elseif ($_.Exception.Message -eq 'E') {
+                }
+                elseif ($_.Exception.Message -eq 'E') {
                     return
-                } elseif ($_.Exception.Message -eq 'R') {
+                }
+                elseif ($_.Exception.Message -eq 'R') {
                     Write-Host "`nReloading PIM roles list..." -ForegroundColor Cyan
                     Start-Sleep -Seconds 1
-                    continue  # Reload and display the roles list again
-                } else {
+                    continue
+                }
+                else {
                     Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                     Start-Sleep -Seconds 3
                     return
                 }
             }
 
-            # Parse the input
-            $chosenIndices = $chosenIndicesInput -split ',' | ForEach-Object { $_.Trim() }
+            # Split input and filter out empty entries (e.g. due to trailing commas)
+            $chosenIndices = $chosenIndicesInput -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
+            if (-not $chosenIndices) {
+                Write-Host "`nNo valid selections detected. Please try again." -ForegroundColor Red
+                Start-Sleep -Seconds 2
+                continue
+            }
 
             # Validate the selections
             $invalidSelections = $chosenIndices | Where-Object { -not ($_ -match '^\d+$') -or [int]$_ -lt 1 -or [int]$_ -gt $eligibleRoles.Count }
             if ($invalidSelections) {
                 Write-Host "`nInvalid selection(s): $($invalidSelections -join ', ')" -ForegroundColor Red
                 Start-Sleep -Seconds 2
-                continue  # Re-prompt for selection
+                continue
             }
 
-            # Map selected indices to roles
             $selectedRoles = $chosenIndices | ForEach-Object { $roleIndexMap[[int]$_] }
 
-            # Initialize lists for roles to activate and deactivate
             $rolesToActivate = @()
             $rolesToDeactivate = @()
 
@@ -298,21 +311,25 @@ function Activate-PIM {
                         $deactivateChoice = Read-UserInput
                         if ($deactivateChoice.ToUpper() -eq 'Y') {
                             $rolesToDeactivate += $selectedRole
-                        } else {
+                        }
+                        else {
                             Write-Host "Skipping deactivation of '$($selectedRole.RoleDefinition.DisplayName)'." -ForegroundColor Cyan
                         }
-                    } catch {
+                    }
+                    catch {
                         if ($_.Exception.Message -eq 'UserCancelled') {
                             Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                             Start-Sleep -Seconds 3
                             return
-                        } else {
+                        }
+                        else {
                             Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                             Start-Sleep -Seconds 3
                             return
                         }
                     }
-                } else {
+                }
+                else {
                     $rolesToActivate += $selectedRole
                 }
             }
@@ -323,55 +340,47 @@ function Activate-PIM {
                 continue
             }
 
-            # Proceed to deactivation for the selected roles
             if ($rolesToDeactivate) {
                 foreach ($selectedRole in $rolesToDeactivate) {
                     try {
                         $selectedRoleId = $selectedRole.RoleDefinition.Id
-                        # Find the active assignment schedule instance for the role
                         $activeAssignmentInstance = $activeRoles | Where-Object { $_.RoleDefinition.Id -eq $selectedRoleId }
-
                         if ($activeAssignmentInstance) {
-                            # Deactivate the role by submitting a selfDeactivate request
                             $deactivateParams = @{
-                                Action                = "selfDeactivate"
-                                AssignmentScheduleId  = $activeAssignmentInstance.AssignmentScheduleId
-                                Justification         = "User requested deactivation."
-                                PrincipalId           = $currentUserId
-                                RoleDefinitionId      = $selectedRoleId
-                                DirectoryScopeId      = $selectedRole.DirectoryScopeId
+                                Action               = "selfDeactivate"
+                                AssignmentScheduleId = $activeAssignmentInstance.AssignmentScheduleId
+                                Justification        = "User requested deactivation."
+                                PrincipalId          = $currentUserId
+                                RoleDefinitionId     = $selectedRoleId
+                                DirectoryScopeId     = $selectedRole.DirectoryScopeId
                             }
-
-                            # Submit the selfDeactivate request without ScheduleInfo or TicketInfo
                             New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $deactivateParams -ErrorAction Stop | Out-Null
                             Write-Host "Deactivation request for '$($selectedRole.RoleDefinition.DisplayName)' submitted successfully!" -ForegroundColor Green
-                        } else {
+                        }
+                        else {
                             Write-Host "Could not find the active assignment instance for this role." -ForegroundColor Red
                         }
-                    } catch {
-                        # Handle specific error: ActiveDurationTooShort
+                    }
+                    catch {
                         if ($_.Exception.Message -like '*ActiveDurationTooShort*') {
                             Write-Host "Cannot deactivate '$($selectedRole.RoleDefinition.DisplayName)'. The active duration is too short. Minimum required is 5 minutes." -ForegroundColor Red
-                        } else {
+                        }
+                        else {
                             Write-Host "An error occurred during deactivation of '$($selectedRole.RoleDefinition.DisplayName)':" -ForegroundColor Red
                             Write-Host $_.Exception.Message -ForegroundColor Red
                         }
-                        # Continue with next role deactivation
                     }
                 }
-
-                # Reload the active roles after deactivation
                 $activeRoles = Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance -Filter "principalId eq '$currentUserId'" -ExpandProperty RoleDefinition
                 $activeRoleIds = $activeRoles | Select-Object -ExpandProperty RoleDefinition | Select-Object -ExpandProperty Id
             }
 
-            # Proceed to activation for the selected roles
             if ($rolesToActivate) {
-                # Prompt for Justification
                 if ($rolesToActivate.Count -gt 1) {
                     Write-Host
                     Write-Host "Enter the justification for activating the selected roles (required):"
-                } else {
+                }
+                else {
                     Write-Host
                     Write-Host "Enter the justification for activating the role '$($rolesToActivate[0].RoleDefinition.DisplayName)' (required):"
                 }
@@ -383,44 +392,44 @@ function Activate-PIM {
                         Write-Host -NoNewline "Justification: "
                         $justification = Read-UserInput
                     }
-                } catch {
+                }
+                catch {
                     if ($_.Exception.Message -eq 'UserCancelled') {
                         Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                         Start-Sleep -Seconds 3
                         return
-                    } else {
+                    }
+                    else {
                         Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                         Start-Sleep -Seconds 3
                         return
                     }
                 }
 
-                # Check for TicketingRule (Assuming ticketing is required)
-                $requiresTicket = $true  # Assume ticketing is required
+                $requiresTicket = $true  # Ticketing is required
                 $ticketInfo = @{}
 
-                # If ticketing is required, prompt for ticket details
                 if ($requiresTicket) {
-                    do {
-                        Write-Host "Enter the ticket number (required):"
-                        Write-Host -NoNewline "Ticket Number: "
-                        try {
-                            $ticketNumber = Read-UserInput
-                            if (-not $ticketNumber) {
-                                Write-Host "Ticket number is required. Please enter a valid ticket number." -ForegroundColor Red
-                            }
-                        } catch {
-                            if ($_.Exception.Message -eq 'UserCancelled') {
-                                Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
-                                Start-Sleep -Seconds 3
-                                return
-                            } else {
-                                Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
-                                Start-Sleep -Seconds 3
-                                return
-                            }
+                    Write-Host "Enter the ticket number (default is None):"
+                    Write-Host -NoNewline "Ticket Number: "
+                    try {
+                        $ticketNumber = Read-UserInput
+                        if (-not $ticketNumber) {
+                            $ticketNumber = "None"
                         }
-                    } while (-not $ticketNumber)
+                    }
+                    catch {
+                        if ($_.Exception.Message -eq 'UserCancelled') {
+                            Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
+                            Start-Sleep -Seconds 3
+                            return
+                        }
+                        else {
+                            Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
+                            Start-Sleep -Seconds 3
+                            return
+                        }
+                    }
 
                     Write-Host "Enter the ticket system (default is JIRA):"
                     Write-Host -NoNewline "Ticket System: "
@@ -429,12 +438,14 @@ function Activate-PIM {
                         if (-not $ticketSystem) {
                             $ticketSystem = "JIRA"
                         }
-                    } catch {
+                    }
+                    catch {
                         if ($_.Exception.Message -eq 'UserCancelled') {
                             Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                             Start-Sleep -Seconds 3
                             return
-                        } else {
+                        }
+                        else {
                             Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                             Start-Sleep -Seconds 3
                             return
@@ -447,18 +458,19 @@ function Activate-PIM {
                     }
                 }
 
-                # Prompt for activation duration (default to 2 hours if none provided, with min=1 and max=8)
                 do {
-                    Write-Host "Enter the duration for the role activation in hours (1-8, default is 2 hours):"
+                    Write-Host "Enter the duration for the role activation in hours (1-8, default is 4 hours):"
                     Write-Host -NoNewline "Duration (hours): "
                     try {
                         $durationInput = Read-UserInput
-                    } catch {
+                    }
+                    catch {
                         if ($_.Exception.Message -eq 'UserCancelled') {
                             Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                             Start-Sleep -Seconds 3
                             return
-                        } else {
+                        }
+                        else {
                             Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                             Start-Sleep -Seconds 3
                             return
@@ -466,46 +478,44 @@ function Activate-PIM {
                     }
 
                     if (-not $durationInput) {
-                        $duration = "PT2H"  # Default to 2 hours
+                        $duration = "PT4H"
                         break
                     }
 
-                    # Validate the duration input
                     if ($durationInput -match '^\d+$') {
                         $durationValue = [int]$durationInput
                         if ($durationValue -ge 1 -and $durationValue -le 8) {
                             $duration = "PT${durationValue}H"
                             break
-                        } else {
+                        }
+                        else {
                             Write-Host "Duration must be between 1 and 8 hours. Please try again." -ForegroundColor Red
                         }
-                    } else {
+                    }
+                    else {
                         Write-Host "Invalid input. Please enter a numeric value between 1 and 8." -ForegroundColor Red
                     }
                 } while ($true)
 
-                # Activate each role
                 foreach ($selectedRole in $rolesToActivate) {
                     try {
                         $selectedRoleId = $selectedRole.RoleDefinition.Id
 
-                        # Refresh active roles for accurate status
                         $activeRoles = Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance -Filter "principalId eq '$currentUserId'" -ExpandProperty RoleDefinition
                         $activeRoleIds = $activeRoles | Select-Object -ExpandProperty RoleDefinition | Select-Object -ExpandProperty Id
 
-                        # Check if the role is now active
                         if ($activeRoleIds -contains $selectedRoleId) {
                             Write-Host "The role '$($selectedRole.RoleDefinition.DisplayName)' is already active." -ForegroundColor Yellow
                             continue
                         }
 
                         $activationParams = @{
-                            Action            = "selfActivate"
-                            PrincipalId       = $currentUserId
-                            RoleDefinitionId  = $selectedRoleId
-                            DirectoryScopeId  = $selectedRole.DirectoryScopeId
-                            Justification     = $justification
-                            ScheduleInfo      = @{
+                            Action           = "selfActivate"
+                            PrincipalId      = $currentUserId
+                            RoleDefinitionId = $selectedRoleId
+                            DirectoryScopeId = $selectedRole.DirectoryScopeId
+                            Justification    = $justification
+                            ScheduleInfo     = @{
                                 StartDateTime = (Get-Date)
                                 Expiration    = @{
                                     Type     = "AfterDuration"
@@ -514,48 +524,51 @@ function Activate-PIM {
                             }
                         }
 
-                        # Add ticket info if required
                         if ($requiresTicket) {
                             $activationParams.TicketInfo = $ticketInfo
                         }
 
-                        # Activate the role and suppress output
                         New-MgRoleManagementDirectoryRoleAssignmentScheduleRequest -BodyParameter $activationParams -ErrorAction Stop | Out-Null
                         Write-Host "Activation request for '$($selectedRole.RoleDefinition.DisplayName)' submitted successfully!" -ForegroundColor Green
 
-                    } catch {
-                        # Check if error is due to existing role assignment
-                        if ($_.Exception.Message -match 'RoleAssignmentExists') {
+                    }
+                    catch {
+                        if ($_.Exception.Message -match 'PendingRoleAssignmentRequest') {
+                            Write-Host "Activation request for '$($selectedRole.RoleDefinition.DisplayName)' submitted successfully (pending)!" -ForegroundColor Green
+                        }
+                        elseif ($_.Exception.Message -match 'RoleAssignmentExists') {
                             Write-Host "The role '$($selectedRole.RoleDefinition.DisplayName)' is already assigned or has a pending activation request." -ForegroundColor Yellow
-                        } else {
+                        }
+                        else {
                             Write-Host "An error occurred during activation of '$($selectedRole.RoleDefinition.DisplayName)':" -ForegroundColor Red
                             Write-Host $_.Exception.Message -ForegroundColor Red
                         }
-                        # Continue with next role activation
                     }
                 }
 
-                # Reload the active roles after activation
                 $activeRoles = Get-MgRoleManagementDirectoryRoleAssignmentScheduleInstance -Filter "principalId eq '$currentUserId'" -ExpandProperty RoleDefinition
                 $activeRoleIds = $activeRoles | Select-Object -ExpandProperty RoleDefinition | Select-Object -ExpandProperty Id
             }
 
-            # After actions, decide whether to continue, reload, or exit
             Write-Host
             Write-Host "Do you want to perform more actions? (Y/R/N)"
             Write-Host -NoNewline "Choice: "
             try {
-                $continueChoice = Read-UserInput -SpecialKeys @('E','R','Y','N')
-            } catch {
+                $continueChoice = Read-UserInput -SpecialKeys @('E', 'R', 'Y', 'N')
+            }
+            catch {
                 if ($_.Exception.Message -eq 'UserCancelled') {
                     Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                     Start-Sleep -Seconds 3
                     return
-                } elseif ($_.Exception.Message -eq 'E') {
+                }
+                elseif ($_.Exception.Message -eq 'E') {
                     return
-                } elseif ($_.Exception.Message -eq 'R' -or $_.Exception.Message -eq 'Y' -or $_.Exception.Message -eq 'N') {
+                }
+                elseif ($_.Exception.Message -eq 'R' -or $_.Exception.Message -eq 'Y' -or $_.Exception.Message -eq 'N') {
                     $continueChoice = $_.Exception.Message
-                } else {
+                }
+                else {
                     Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                     Start-Sleep -Seconds 3
                     return
@@ -563,30 +576,27 @@ function Activate-PIM {
             }
 
             switch ($continueChoice.ToUpper()) {
-                'Y' {
-                    continue  # Loop back to reload and display the menu
-                }
+                'Y' { continue }
                 'R' {
-                    # Reload the PIM status by re-fetching roles
                     Write-Host "`nReloading PIM roles list..." -ForegroundColor Cyan
                     Start-Sleep -Seconds 1
-                    continue  # Loop back to reload and display the updated list
+                    continue
                 }
-                'N' {
-                    return  # Exit to the main menu
-                }
+                'N' { return }
                 default {
                     Write-Host "Invalid choice. Exiting to the main menu." -ForegroundColor Red
                     return
                 }
             }
 
-        } catch {
+        }
+        catch {
             if ($_.Exception.Message -eq 'UserCancelled') {
                 Write-Host "`nOperation cancelled by user." -ForegroundColor Yellow
                 Start-Sleep -Seconds 3
                 return
-            } else {
+            }
+            else {
                 Write-Host "`nAn unexpected error occurred: $_" -ForegroundColor Red
                 Start-Sleep -Seconds 3
                 return
@@ -623,7 +633,8 @@ function Search-Users {
 
             if ($response.'@odata.nextLink') {
                 $query = $response.'@odata.nextLink'
-            } else {
+            }
+            else {
                 $morePages = $false
             }
         }
@@ -631,15 +642,18 @@ function Search-Users {
         if ($global:userResults.Count -eq 1) {
             Write-Host "Found 1 user." -ForegroundColor Green
             Show-UserDetails -index 0
-        } elseif ($global:userResults.Count -gt 1) {
+        }
+        elseif ($global:userResults.Count -gt 1) {
             Write-Host "Found $($global:userResults.Count) users." -ForegroundColor Green
             Start-Sleep -Seconds 1
             Show-UserResults
-        } else {
+        }
+        else {
             Show-NotFoundMessage -Context 'Users'
             Start-Sleep -Seconds 1
         }
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
         Start-Sleep -Seconds 1
     }
@@ -654,11 +668,11 @@ function Show-UserResults {
         Draw-Banner $global:userDisplayName
         Write-Host "Users - Page $global:currentPage/$global:totalPages`n" -ForegroundColor Cyan
 
-        $start = ($global:currentPage -1) * $global:pageSize
+        $start = ($global:currentPage - 1) * $global:pageSize
         $end = [math]::Min($start + $global:pageSize, $global:userResults.Count)
 
         for ($i = $start; $i -lt $end; $i++) {
-            $num = $i +1
+            $num = $i + 1
             $user = $global:userResults[$i]
             Write-Host "$num. $($user.displayName), UPN: $($user.userPrincipalName)" -ForegroundColor White
         }
@@ -671,7 +685,8 @@ function Show-UserResults {
             'N' {
                 if ($global:currentPage -lt $global:totalPages) {
                     $global:currentPage++
-                } else {
+                }
+                else {
                     Write-Host "Last page." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -679,7 +694,8 @@ function Show-UserResults {
             'P' {
                 if ($global:currentPage -gt 1) {
                     $global:currentPage--
-                } else {
+                }
+                else {
                     Write-Host "First page." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -693,16 +709,18 @@ function Show-UserResults {
                 }
 
                 if ($selection -match '^\d+$') {
-                    $index = [int]$selection -1
+                    $index = [int]$selection - 1
                     if ($index -ge 0 -and $index -lt $global:userResults.Count) {
                         Show-UserDetails -index $index
                         # After viewing details, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Invalid selection." -ForegroundColor Red
                         Start-Sleep -Seconds 1
                     }
-                } else {
+                }
+                else {
                     Write-Host "Invalid input." -ForegroundColor Red
                     Start-Sleep -Seconds 1
                 }
@@ -750,7 +768,8 @@ function Show-UserDetails {
         # Prompt to return to the users list
         Write-Host "`nPress Enter to return to the users list." -ForegroundColor Yellow
         [void][System.Console]::ReadKey($true)
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
         Write-Host "`nPress Enter to return to the users list." -ForegroundColor Yellow
         [void][System.Console]::ReadKey($true)
@@ -784,7 +803,8 @@ function Show-UserDevices {
 
             if ($response.'@odata.nextLink') {
                 $query = $response.'@odata.nextLink'
-            } else {
+            }
+            else {
                 $morePages = $false
             }
         }
@@ -792,7 +812,8 @@ function Show-UserDevices {
         if (-not $response.value -or $response.value.Count -eq 0) {
             Show-NotFoundMessage -Context 'Devices'
         }
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
     }
 }
@@ -827,7 +848,8 @@ function Search-Devices {
 
             if ($responseSerial.'@odata.nextLink') {
                 $querySerial = $responseSerial.'@odata.nextLink'
-            } else {
+            }
+            else {
                 $morePages = $false
             }
         }
@@ -836,12 +858,14 @@ function Search-Devices {
             Write-Host "Found 1 device by Serial Number." -ForegroundColor Green
             Show-DeviceDetails -index 0
             return
-        } elseif ($global:deviceResults.Count -gt 1) {
+        }
+        elseif ($global:deviceResults.Count -gt 1) {
             Write-Host "Found $($global:deviceResults.Count) devices by Serial Number." -ForegroundColor Green
             Start-Sleep -Seconds 1
             Show-DeviceResults
             return
-        } else {
+        }
+        else {
             Write-Host "No devices found by Serial Number." -ForegroundColor Yellow
             # Clear deviceResults for next search
             $global:deviceResults = @()
@@ -858,7 +882,8 @@ function Search-Devices {
 
                 if ($responseName.'@odata.nextLink') {
                     $queryName = $responseName.'@odata.nextLink'
-                } else {
+                }
+                else {
                     $morePages = $false
                 }
             }
@@ -866,17 +891,20 @@ function Search-Devices {
             if ($global:deviceResults.Count -eq 1) {
                 Write-Host "Found 1 device by Name." -ForegroundColor Green
                 Show-DeviceDetails -index 0
-            } elseif ($global:deviceResults.Count -gt 1) {
+            }
+            elseif ($global:deviceResults.Count -gt 1) {
                 Write-Host "Found $($global:deviceResults.Count) devices by Name." -ForegroundColor Green
                 Start-Sleep -Seconds 1
                 Show-DeviceResults
-            } else {
+            }
+            else {
                 Show-NotFoundMessage -Context 'Devices'
                 Start-Sleep -Seconds 1
             }
         }
 
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
         Start-Sleep -Seconds 1
     }
@@ -891,11 +919,11 @@ function Show-DeviceResults {
         Draw-Banner $global:userDisplayName
         Write-Host "Devices - Page $global:currentPage/$global:totalPages`n" -ForegroundColor Cyan
 
-        $start = ($global:currentPage -1) * $global:pageSize
+        $start = ($global:currentPage - 1) * $global:pageSize
         $end = [math]::Min($start + $global:pageSize, $global:deviceResults.Count)
 
         for ($i = $start; $i -lt $end; $i++) {
-            $num = $i +1
+            $num = $i + 1
             $device = $global:deviceResults[$i]
             Write-Host "$num. $($device.deviceName), Serial: $($device.serialNumber)" -ForegroundColor White
         }
@@ -908,7 +936,8 @@ function Show-DeviceResults {
             'N' {
                 if ($global:currentPage -lt $global:totalPages) {
                     $global:currentPage++
-                } else {
+                }
+                else {
                     Write-Host "Last page." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -916,7 +945,8 @@ function Show-DeviceResults {
             'P' {
                 if ($global:currentPage -gt 1) {
                     $global:currentPage--
-                } else {
+                }
+                else {
                     Write-Host "First page." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -930,16 +960,18 @@ function Show-DeviceResults {
                 }
 
                 if ($selection -match '^\d+$') {
-                    $index = [int]$selection -1
+                    $index = [int]$selection - 1
                     if ($index -ge 0 -and $index -lt $global:deviceResults.Count) {
                         Show-DeviceDetails -index $index
                         # After viewing details, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Invalid selection." -ForegroundColor Red
                         Start-Sleep -Seconds 1
                     }
-                } else {
+                }
+                else {
                     Write-Host "Invalid input." -ForegroundColor Red
                     Start-Sleep -Seconds 1
                 }
@@ -981,7 +1013,8 @@ function Show-DeviceDetails {
         # Prompt to return to the devices list
         Write-Host "`nPress Enter to return to the devices list." -ForegroundColor Yellow
         [void][System.Console]::ReadKey($true)
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
         Write-Host "`nPress Enter to return to the devices list." -ForegroundColor Yellow
         [void][System.Console]::ReadKey($true)
@@ -1009,7 +1042,8 @@ function Show-DeviceUser {
         Write-Host "UserPrincipalName : $($response.userPrincipalName)"
         Write-Host "DisplayName       : $($response.displayName)"
         Write-Host ("-" * 50) -ForegroundColor Yellow
-    } catch {
+    }
+    catch {
         Show-SimpleErrorMessage
     }
 }
@@ -1036,7 +1070,8 @@ do {
         }
         Write-Host "Goodbye!" -ForegroundColor Green
         exit
-    } else {
+    }
+    else {
         Authenticate-Graph
     }
 
@@ -1075,7 +1110,8 @@ do {
                         Search-Users -searchText $searchText
                         # After search, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Enter valid search text." -ForegroundColor Yellow
                         Start-Sleep -Seconds 1
                     }
@@ -1091,7 +1127,8 @@ do {
                         Search-Users -searchText $searchText
                         # After search, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Enter valid search text." -ForegroundColor Yellow
                         Start-Sleep -Seconds 1
                     }
@@ -1107,7 +1144,8 @@ do {
                         Search-Devices -searchText $searchText
                         # After search, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Enter valid search text." -ForegroundColor Yellow
                         Start-Sleep -Seconds 1
                     }
@@ -1123,7 +1161,8 @@ do {
                         Search-Devices -searchText $searchText
                         # After search, redraw the banner
                         Draw-Banner $global:userDisplayName
-                    } else {
+                    }
+                    else {
                         Write-Host "Enter valid search text." -ForegroundColor Yellow
                         Start-Sleep -Seconds 1
                     }
@@ -1152,7 +1191,8 @@ do {
                 }
             }
         }
-    } else {
+    }
+    else {
         Write-Host "Authentication failed. Try again." -ForegroundColor Red
         Write-Host "Press Enter to retry or 'E' to exit." -ForegroundColor Yellow
         $retryKey = Read-SingleKey
